@@ -10,7 +10,7 @@ import java.util.Date;
 @Component
 public class JwtService {
 
-    private final String SECRET = "SUPER_SECRET_KEY_1234567890";
+    private static final String SECRET = "THIS_IS_A_VERY_LONG_AND_SECURE_256_BIT_SECRET_KEY_123456";
 
     public String generateToken(User user, int minutes) {
         return Jwts.builder()
@@ -20,14 +20,14 @@ public class JwtService {
                 .signWith(Keys.hmacShaKeyFor(SECRET.getBytes()))
                 .compact();
     }
-
     public String extractUsername(String token) {
-        return Jwts.parser()
+        return Jwts.parserBuilder()
                 .setSigningKey(SECRET.getBytes())
                 .build()
                 .parseClaimsJws(token)
                 .getBody()
                 .getSubject();
     }
+
 }
 

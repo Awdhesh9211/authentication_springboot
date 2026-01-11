@@ -17,21 +17,32 @@ public class RefreshTokenService {
     RefreshTokenRepo repo;
 
     public RefreshToken create(User user) {
+
+        // 🔥 Step 1: Agar is user ka pehle se token hai, delete karo
+        repo.findByUser(user).ifPresent(repo::delete);
+
+        // 🔑 Step 2: Naya refresh token banao
         RefreshToken token = new RefreshToken();
         token.setToken(UUID.randomUUID().toString());
         token.setUser(user);
         token.setExpiryDate(Instant.now().plus(7, ChronoUnit.DAYS));
+
         return repo.save(token);
     }
 
     public RefreshToken verify(String token) {
         RefreshToken rt = repo.findByToken(token)
-                .orElseThrow(() -> new RuntimeException("Invalid token"));
+                .orElseThrow(() -> new RuntimeException("Invalid refresh token"));
 
-        if (rt.getExpiryDate().isBefore(Instant.now()))
-            throw new RuntimeException("Expired");
+        if (rt.getExpiryDate().isBefore(Instant.now())) {
+            // Token expired, delete it from DB
+            repo.delete(rt);
+            throw new RuntimeException("Refresh token expired");
+        }
 
         return rt;
     }
+
 }
+
 
