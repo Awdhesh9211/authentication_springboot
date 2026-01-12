@@ -12,6 +12,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -33,43 +34,49 @@ public class JwtFilter extends OncePerRequestFilter {
     private RefreshTokenRepo refreshRepo;
 
     @Override
-    protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res,
+    protected void doFilterInternal(HttpServletRequest req,
+                                    HttpServletResponse res,
                                     FilterChain chain) throws IOException, ServletException {
 
-        String header = req.getHeader("Authorization");
+        String token = null;
         String username = null;
+        String role = null;
 
-        // 1️⃣ Check Authorization header first
+        String header = req.getHeader("Authorization");
+
         if (header != null && header.startsWith("Bearer ")) {
-            String token = header.substring(7);
-            username = jwt.extractUsername(token);
-
-        } else {
-            // 2️⃣ If no header, check cookie
-            if (req.getCookies() != null) {
-                for (Cookie cookie : req.getCookies()) {
-                    if (cookie.getName().equals("refreshToken")) {
-                        String refreshToken = cookie.getValue();
-                        Optional<RefreshToken> rtOpt = refreshRepo.findByToken(refreshToken);
-                        if (rtOpt.isPresent() && rtOpt.get().getExpiryDate().isAfter(java.time.Instant.now())) {
-                            username = rtOpt.get().getUser().getUsername();
-                        }
-                        break;
-                    }
+            token = header.substring(7);
+        } else if (req.getCookies() != null) {
+            for (Cookie cookie : req.getCookies()) {
+                if (cookie.getName().equals("accessToken")) {
+                    token = cookie.getValue();
+                    break;
                 }
             }
         }
 
-        // 3️⃣ If username found, set authentication
+        if (token != null) {
+            username = jwt.extractUsername(token);
+            role = jwt.extractRole(token);
+        }
+
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+
             User user = userRepo.findByUsername(username).orElseThrow();
 
+            var authority = new SimpleGrantedAuthority("ROLE_" + role);
+
             UsernamePasswordAuthenticationToken auth =
-                    new UsernamePasswordAuthenticationToken(user, null, List.of());
+                    new UsernamePasswordAuthenticationToken(
+                            user,
+                            null,
+                            List.of(authority)
+                    );
 
             SecurityContextHolder.getContext().setAuthentication(auth);
         }
 
         chain.doFilter(req, res);
     }
+
 }

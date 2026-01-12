@@ -45,53 +45,83 @@ public class AuthController {
 
         Map<String,String> tokens = authService.login(req.get("username"), req.get("password"));
 
-        Cookie cookie = new Cookie("refreshToken", tokens.get("refreshToken"));
-        cookie.setHttpOnly(true);
-        cookie.setPath("/");
-        cookie.setMaxAge(7 * 24 * 60 * 60);
-        response.addCookie(cookie);
+        // Refresh Token
+        Cookie refreshCookie = new Cookie("refreshToken", tokens.get("refreshToken"));
+        refreshCookie.setHttpOnly(true);
+        refreshCookie.setPath("/");
+        refreshCookie.setMaxAge(30 * 24 * 60 * 60);
+        response.addCookie(refreshCookie);
 
-        return ResponseEntity.ok(Map.of("accessToken", tokens.get("accessToken")));
+        // Access Token
+        Cookie accessCookie = new Cookie("accessToken", tokens.get("accessToken"));
+        accessCookie.setHttpOnly(true);
+        accessCookie.setPath("/");
+        accessCookie.setMaxAge(10 * 60); // 10 minutes
+        response.addCookie(accessCookie);   // ✅ THIS WAS MISSING
+
+        return ResponseEntity.ok("Login Success !");
     }
 
+
     @PostMapping("/auth/refresh")
-    public ResponseEntity<Map<String,String>> refresh(@CookieValue(value = "refreshToken", required = false) String token) {
+    public ResponseEntity<?> refresh(
+            @CookieValue(value = "refreshToken", required = false) String token,
+            HttpServletResponse response) {
 
         if (token == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
-        RefreshToken rt = refreshService.verify(token); // throws if invalid
+        RefreshToken rt = refreshService.verify(token);
 
         String newAccessToken = jwtService.generateToken(rt.getUser(), 10);
-        return ResponseEntity.ok(Map.of("accessToken", newAccessToken));
+
+        Cookie accessCookie = new Cookie("accessToken", newAccessToken);
+        accessCookie.setHttpOnly(true);
+        accessCookie.setPath("/");
+        accessCookie.setMaxAge(10 * 60);
+        response.addCookie(accessCookie);
+
+        return ResponseEntity.ok("Access token refreshed");
     }
 
 
+
     @PostMapping("/auth/logout")
-    public ResponseEntity<String> logout(@CookieValue(value = "refreshToken", required = false) String token,
-                                         HttpServletResponse response) {
+    public ResponseEntity<String> logout(
+            @CookieValue(value = "refreshToken", required = false) String token,
+            HttpServletResponse response) {
 
         if (token != null) {
-            // Delete token from DB if it exists
             refreshRepo.findByToken(token).ifPresent(refreshRepo::delete);
         }
 
-        // Delete cookie
-        Cookie cookie = new Cookie("refreshToken", null);
-        cookie.setHttpOnly(true);  // Security: JS cannot read
-        cookie.setSecure(false);   // true if HTTPS
-        cookie.setPath("/");        // cookie sent to all auth endpoints
-        cookie.setMaxAge(0);        // remove cookie
-        response.addCookie(cookie);
+        Cookie refresh = new Cookie("refreshToken", null);
+        refresh.setHttpOnly(true);
+        refresh.setPath("/");
+        refresh.setMaxAge(0);
+
+        Cookie access = new Cookie("accessToken", null);
+        access.setHttpOnly(true);
+        access.setPath("/");
+        access.setMaxAge(0);
+
+        response.addCookie(refresh);
+        response.addCookie(access);
 
         return ResponseEntity.ok("Logged out successfully");
     }
 
 
-    @GetMapping("/profile")
+
+    @GetMapping("/user/profile")
     public String profile(){
         return "Welcome Awdhesh 😎 Secure API";
+    }
+
+    @GetMapping("/admin/create")
+    public String create(){
+        return "Admin Page ";
     }
 }
 
